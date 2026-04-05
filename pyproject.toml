@@ -1,0 +1,16 @@
+[project]
+name = "group-reimbursement"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "cryptography",
+    "httpx",
+    "notion-client",
+    "pillow",
+    "pypdf",
+    "python-dotenv",
+    "reportlab",
+    "requests",
+]

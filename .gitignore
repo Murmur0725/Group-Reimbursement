@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.env
+
+# Local data and system files
+.DS_Store
+data/downloads/*
+!data/downloads/.gitkeep
+data/output_pdfs/*
+!data/output_pdfs/.gitkeep
