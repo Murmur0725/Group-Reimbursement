@@ -34,7 +34,7 @@ def run_processor():
 
     ensure_data_directories(settings)
 
-    from app.downloader import download_media
+    from app.downloader import download_media, resolve_download_path
     from app.notion_client import (
         create_client,
         ensure_database_access,
@@ -83,6 +83,31 @@ def run_processor():
                 downloaded_items = download_media(files, settings.download_dir)
                 if not downloaded_items:
                     print("  Failed to download any valid media.")
+                    continue
+
+                if settings.mode == "fapiao":
+                    pdf_count = 0
+                    for item in downloaded_items:
+                        try:
+                            if item["type"] != "pdf":
+                                item["path"].unlink(missing_ok=True)
+                                continue
+
+                            target_path = resolve_download_path(
+                                settings.fapiao_dir,
+                                page_id,
+                                item["path"].name,
+                            )
+                            item["path"].replace(target_path)
+                            print(f"  Saved PDF to fapiao folder: {target_path}")
+                            pdf_count += 1
+                        except Exception as exc:
+                            print(f"  Warning: Could not handle file {item['path']}: {exc}")
+
+                    if pdf_count == 0:
+                        print("  No PDF files found for this item.")
+                    else:
+                        processed_count += 1
                     continue
 
                 if settings.mode == "download":

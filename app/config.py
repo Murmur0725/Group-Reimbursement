@@ -7,6 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 DOWNLOAD_DIR = DATA_DIR / "downloads"
 OUTPUT_DIR = DATA_DIR / "output_pdfs"
+FAPIAO_DIR = DATA_DIR / "fapiao"
 
 REQUIRED_DEPENDENCIES = {
     "dotenv": "python-dotenv",
@@ -35,6 +36,7 @@ class Settings:
     data_dir: Path = DATA_DIR
     download_dir: Path = DOWNLOAD_DIR
     output_dir: Path = OUTPUT_DIR
+    fapiao_dir: Path = FAPIAO_DIR
 
 
 def check_dependencies():
@@ -78,9 +80,11 @@ def load_settings():
         number_property_name=os.getenv("NUMBER_PROPERTY_NAME", "编号"),
         name_property_name=os.getenv("NAME_PROPERTY_NAME", "名称"),
         files_property_name=os.getenv("FILES_PROPERTY_NAME", "文件和媒体"),
+        fapiao_dir=Path(os.getenv("FAPIAO_DIR", str(FAPIAO_DIR))),
     )
 
 
 def ensure_data_directories(settings):
     settings.download_dir.mkdir(parents=True, exist_ok=True)
     settings.output_dir.mkdir(parents=True, exist_ok=True)
+    settings.fapiao_dir.mkdir(parents=True, exist_ok=True)
