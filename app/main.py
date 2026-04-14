@@ -22,12 +22,12 @@ def build_pdf_filename(number, name):
     return sanitized or "output.pdf"
 
 
-def run_processor():
+def run_processor(mode_override=None):
     if not check_dependencies():
         return 1
 
     try:
-        settings = load_settings()
+        settings = load_settings(mode_override=mode_override)
     except ValueError as exc:
         print(f"Error: {exc}")
         return 1
@@ -164,7 +164,13 @@ def main(argv=None):
         cleanup_artifacts()
         return 0
 
-    return run_processor()
+    mode_override = None
+    if args:
+        candidate = args[0].lower()
+        if candidate in ("pdf", "download", "fapiao"):
+            mode_override = candidate
+
+    return run_processor(mode_override=mode_override)
 
 
 if __name__ == "__main__":

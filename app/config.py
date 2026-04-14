@@ -59,7 +59,7 @@ def check_dependencies():
     return False
 
 
-def load_settings():
+def load_settings(mode_override=None):
     from dotenv import load_dotenv
 
     load_dotenv(BASE_DIR / ".env")
@@ -70,12 +70,19 @@ def load_settings():
     if not notion_token or not notion_page_id:
         raise ValueError("Please set NOTION_TOKEN and NOTION_PAGE_ID in .env file")
 
+    mode = (mode_override or os.getenv("MODE", "pdf")).lower()
+    status_to_process_default = os.getenv("STATUS_TO_PROCESS", "1-发票+购买记录")
+    status_to_process = os.getenv(
+        f"STATUS_TO_PROCESS_{mode.upper()}",
+        status_to_process_default,
+    )
+
     return Settings(
         notion_token=notion_token,
         notion_page_id=notion_page_id,
-        mode=os.getenv("MODE", "pdf").lower(),
+        mode=mode,
         status_property_name=os.getenv("STATUS_PROPERTY_NAME", "状态"),
-        status_to_process=os.getenv("STATUS_TO_PROCESS", "1-发票+购买记录"),
+        status_to_process=status_to_process,
         status_processed=os.getenv("STATUS_PROCESSED", "2-已处理"),
         number_property_name=os.getenv("NUMBER_PROPERTY_NAME", "编号"),
         name_property_name=os.getenv("NAME_PROPERTY_NAME", "名称"),
