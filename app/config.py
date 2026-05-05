@@ -31,6 +31,7 @@ class Settings:
     status_processed: str
     number_property_name: str
     name_property_name: str
+    reimburse_to_property_name: str
     files_property_name: str
     base_dir: Path = BASE_DIR
     data_dir: Path = DATA_DIR
@@ -86,6 +87,7 @@ def load_settings(mode_override=None):
         status_processed=os.getenv("STATUS_PROCESSED", "2-已处理"),
         number_property_name=os.getenv("NUMBER_PROPERTY_NAME", "编号"),
         name_property_name=os.getenv("NAME_PROPERTY_NAME", "名称"),
+        reimburse_to_property_name=os.getenv("REIMBURSE_TO_PROPERTY_NAME", "报销给谁"),
         files_property_name=os.getenv("FILES_PROPERTY_NAME", "文件和媒体"),
         fapiao_dir=Path(os.getenv("FAPIAO_DIR", str(FAPIAO_DIR))),
     )
