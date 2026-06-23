@@ -12,6 +12,7 @@
 
 - **pdf 模式**：下载附件 → 合并成 PDF → 更新 Notion 状态
 - **download 模式**：只下载附件到本地，不生成 PDF、不改状态
+- **fapiao 模式**：只保留 PDF 附件，保存到 `./data/fapiao/`，并自动生成「线下发货单」Excel
 
 还内置了一个清理命令，可以一键删除历史下载和生成的 PDF。
 
@@ -26,14 +27,21 @@ Group-Reimbursement/
 │  ├─ notion_client.py
 │  ├─ downloader.py
 │  ├─ pdf_service.py
-│  └─ cleanup.py
+│  ├─ cleanup.py
+│  ├─ invoice_parser.py
+│  └─ invoice_to_delivery.py
 ├─ data/
 │  ├─ downloads/
+│  ├─ fapiao/
 │  └─ output_pdfs/
+├─ scripts/
+│  └─ clear_data.py
 ├─ tests/
 │  ├─ test_config.py
 │  ├─ test_downloader.py
-│  └─ test_pdf_service.py
+│  ├─ test_pdf_service.py
+│  ├─ test_invoice_parser.py
+│  └─ test_main.py
 ├─ .env
 ├─ .env.example
 ├─ README.md
@@ -121,6 +129,28 @@ MODE=pdf
 
 ## 5. 运行工具
 
+直接运行主命令而不加参数时，会进入交互式菜单：
+
+```bash
+uv run python -m app.main
+```
+
+菜单选项：
+
+```text
+Notion 报销工具
+============================================================
+  0. quit                  - 退出
+  1. pdf                   - 下载附件并生成合并 PDF，更新 Notion 状态
+  2. fapiao                - 下载发票 PDF 并生成发货单 Excel
+  3. download              - 只下载附件，不生成 PDF
+  4. cleanup               - 清理 downloads 和 output_pdfs
+  5. clear-data            - 清空整个 data 目录
+  6. invoice-to-delivery   - 从现有发票生成发货单 Excel
+```
+
+输入数字或名称即可执行对应功能。也可以通过命令行参数直接运行某个功能，例如 `uv run python -m app.main pdf`。
+
 ### 5.1 生成 PDF 并更新 Notion 状态（默认）
 
 在根目录执行：
@@ -145,9 +175,44 @@ uv run python -m app.main
   ./data/output_pdfs/
   ```
 
-- 将对应条目的「状态」更新为 `STATUS_PROCESSED`
+- 所有记录处理完毕后，把生成的单独 PDF 合并成一个总 PDF：
 
-### 5.2 只下载附件，不生成 PDF
+  ```text
+  ./data/output_pdfs/merged_all.pdf
+  ```
+
+- 合并完成后，将所有已处理条目的「状态」更新为 `STATUS_PROCESSED`
+
+### 5.2 下载发票 PDF 并自动生成发货单表格（fapiao 模式）
+
+将 `.env` 中的 `MODE` 改为：
+
+```ini
+MODE=fapiao
+```
+
+然后运行：
+
+```bash
+uv run python -m app.main
+```
+
+行为：
+
+- 查询数据库中「状态」等于 `STATUS_TO_PROCESS` 的所有条目
+- 下载每条记录的「文件和媒体」附件
+- **只保留 PDF 文件**，图片等非 PDF 附件会被丢弃
+- 将 PDF 发票保存到 `./data/fapiao/`
+- **自动根据所有已保存的发票生成** `./data/fapiao/发票发货单整理_YYYY-MM-DD_HH-MM-SS.xlsx`
+- 不修改 Notion 的状态
+
+也可以不修改 `.env`，直接通过命令行参数指定模式：
+
+```bash
+uv run python -m app.main fapiao
+```
+
+### 5.3 只下载附件，不生成 PDF
 
 将 `.env` 中的 `MODE` 改为：
 
@@ -165,6 +230,36 @@ uv run python -m app.main
 
 - 只下载「文件和媒体」里的附件到 `./data/downloads/` 目录
 - 不生成 `data/output_pdfs`，也不会修改 Notion 的状态
+
+### 5.4 从发票 PDF 生成线下发货单表格
+
+如果你已经把电子发票 PDF 放到 `./data/fapiao/`，可以一键整理成「线下发货单」格式的 Excel：
+
+```bash
+uv run python -m app.main invoice-to-delivery
+```
+
+命令会读取所有发票 PDF，提取发票号码、销售方、商品名称、规格、单位、数量、单价等信息，生成：
+
+```text
+./data/fapiao/发票发货单整理_YYYY-MM-DD_HH-MM-SS.xlsx
+```
+
+生成的表格列与 `data/线下发货单_已上传.xls` 保持一致：
+
+- `课题号` 默认填 `Y01656113`
+- `收货地址`、`使用用途`、`备注` 留空，由你后续补充
+- `*货号`、`*品牌` 默认填 `无`
+- `*收货人` 默认填 `mirna zordan`
+- `*产品分类` 统一填 `实验耗材`
+- `*商品名称` 来自发票的项目名称（保留原税收分类前缀）
+- `*供应商名称` 来自发票销售方
+
+也可以指定输入/输出路径：
+
+```bash
+uv run python -m app.main invoice-to-delivery /path/to/fapiao /path/to/output.xlsx
+```
 
 ---
 
@@ -191,7 +286,26 @@ No data/downloads or data/output_pdfs directory to remove.
 
 ---
 
-## 7. 常见问题
+## 7. 清空整个 data 目录
+
+如果你希望一次性清空 `data/` 下的所有内容（包括 `downloads`、`fapiao`、`output_pdfs`），可以使用 `scripts/clear_data.py`：
+
+```bash
+# 预览会删除哪些内容（不真正删除）
+uv run scripts/clear_data.py --dry-run
+
+# 交互式确认后删除
+uv run scripts/clear_data.py
+
+# 跳过确认，直接清空
+uv run scripts/clear_data.py --yes
+```
+
+脚本会保留 `data/` 目录本身及其下的子目录结构，只删除里面的文件和子目录。
+
+---
+
+## 8. 常见问题
 
 - **提示 “Cannot find the database / Integration is NOT connected”**
   - 检查 `.env` 里的 `NOTION_PAGE_ID` 是否是数据库 ID，而不是普通页面 ID

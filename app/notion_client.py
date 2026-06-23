@@ -59,6 +59,10 @@ def extract_property_value(page, prop_name):
         select_obj = prop.get("select")
         return select_obj.get("name") if select_obj else None
 
+    if prop_type == "people":
+        people_list = prop.get("people", [])
+        return people_list[0].get("name", "") if people_list else ""
+
     if prop_type == "files":
         files = []
         for file_obj in prop.get("files", []):

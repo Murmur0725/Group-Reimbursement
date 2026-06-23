@@ -5,7 +5,12 @@ from PIL import Image
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import DependencyError
 from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfgen import canvas
+
+_CJK_FONT = "STSong-Light"
+pdfmetrics.registerFont(UnicodeCIDFont(_CJK_FONT))
 
 
 def is_pdf_file(file_path):
@@ -53,7 +58,7 @@ def create_pdf(downloaded_items, output_filename, label_text=None):
                 pdf_canvas.drawImage(str(file_path), x, y, width=new_width, height=new_height)
 
                 if label_text:
-                    pdf_canvas.setFont("Helvetica", 10)
+                    pdf_canvas.setFont(_CJK_FONT, 10)
                     pdf_canvas.drawString(10, a4_height - 15, str(label_text))
 
                 pdf_canvas.showPage()
@@ -74,7 +79,7 @@ def create_pdf(downloaded_items, output_filename, label_text=None):
                         page_height = float(page.mediabox.height)
 
                         pdf_canvas = canvas.Canvas(packet, pagesize=(page_width, page_height))
-                        pdf_canvas.setFont("Helvetica", 10)
+                        pdf_canvas.setFont(_CJK_FONT, 10)
                         pdf_canvas.drawString(10, page_height - 15, str(label_text))
                         pdf_canvas.save()
 
@@ -90,6 +95,34 @@ def create_pdf(downloaded_items, output_filename, label_text=None):
                 )
             except Exception as exc:
                 print(f"Error merging PDF {file_path}: {exc}")
+
+    with output_path.open("wb") as file_obj:
+        writer.write(file_obj)
+
+
+def merge_pdfs(pdf_paths, output_path):
+    """Merge multiple PDF files into a single PDF in the given order."""
+    writer = PdfWriter()
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    for path in pdf_paths:
+        path = Path(path)
+        if not path.exists():
+            print(f"Warning: PDF not found, skipping merge: {path}")
+            continue
+
+        try:
+            reader = PdfReader(str(path))
+            for page in reader.pages:
+                writer.add_page(page)
+        except DependencyError:
+            print(
+                f"Error merging PDF {path}: encrypted PDF needs "
+                "'cryptography' installed. Run 'pip install cryptography'."
+            )
+        except Exception as exc:
+            print(f"Error merging PDF {path}: {exc}")
 
     with output_path.open("wb") as file_obj:
         writer.write(file_obj)

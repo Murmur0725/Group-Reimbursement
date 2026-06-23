@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import requests
@@ -60,12 +61,22 @@ def download_media(media_items, download_dir):
 
             print(f"Downloading {url[:50]}... to {local_path}")
 
-            response = requests.get(url, stream=True, timeout=30.0)
+            response = requests.get(url, stream=True, timeout=(10.0, 30.0))
             response.raise_for_status()
 
+            start_time = time.time()
+            downloaded_bytes = 0
             with local_path.open("wb") as file_obj:
                 for chunk in response.iter_content(chunk_size=8192):
-                    file_obj.write(chunk)
+                    if chunk:
+                        file_obj.write(chunk)
+                        downloaded_bytes += len(chunk)
+
+            elapsed = time.time() - start_time
+            print(
+                f"Downloaded {local_path.name} "
+                f"({downloaded_bytes / 1024:.1f} KB) in {elapsed:.1f}s"
+            )
 
             if is_image_file(local_path):
                 file_type = "image"
