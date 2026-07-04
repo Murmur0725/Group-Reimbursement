@@ -7,12 +7,10 @@ well as line-item details (category, name, spec, unit, quantity, price, etc.).
 
 from __future__ import annotations
 
-import glob
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
 
 import pdfplumber
 
@@ -31,7 +29,7 @@ def clean_name(name: str | None) -> str | None:
 
 def clean_product_name(name: str) -> str:
     """Remove spaces between adjacent Chinese characters in product names."""
-    return re.sub(r"(?<=[\u4e00-\u9fa5])\s+(?=[\u4e00-\u9fa5])", "", name)
+    return re.sub(r"(?<=[一-龥])\s+(?=[一-龥])", "", name)
 
 
 @dataclass
@@ -63,14 +61,11 @@ class Invoice:
     date: str | None
     buyer: str | None
     seller: str | None
-    items: List[InvoiceItem] = field(default_factory=list)
+    items: list[InvoiceItem] = field(default_factory=list)
 
 
-def parse_invoice(pdf_path: str | os.PathLike) -> Invoice:
-    """Parse a single invoice PDF and return an ``Invoice`` object."""
-    with pdfplumber.open(str(pdf_path)) as pdf:
-        text = pdf.pages[0].extract_text()
-
+def parse_invoice_text(text: str) -> Invoice:
+    """Parse invoice text extracted from a PDF and return an ``Invoice`` object."""
     lines = [normalize_spaces(line) for line in text.split("\n") if normalize_spaces(line)]
     full_text = normalize_spaces(text)
 
@@ -90,8 +85,16 @@ def parse_invoice(pdf_path: str | os.PathLike) -> Invoice:
     )
 
 
+def parse_invoice(pdf_path: str | os.PathLike) -> Invoice:
+    """Parse a single invoice PDF and return an ``Invoice`` object."""
+    with pdfplumber.open(str(pdf_path)) as pdf:
+        text = pdf.pages[0].extract_text()
+    return parse_invoice_text(text)
+
+
 def _extract_invoice_no(text: str) -> str | None:
-    match = re.search(r"\b(\d{20})\b", text)
+    # Electronic invoice numbers are typically 18-22 digits.
+    match = re.search(r"\b(\d{18,22})\b", text)
     return match.group(1) if match else None
 
 
@@ -122,7 +125,7 @@ def _extract_parties(text: str) -> tuple[str | None, str | None]:
             buyer = "南方科技大学"
             match = re.search(
                 r"南方科技大学(?:\s+124403005521093031)?\s+"
-                r"([\u4e00-\u9fa5]+(?:公司|经营部|厂|店|部|中心|研究院|所))",
+                r"([一-龥]+(?:公司|经营部|厂|店|部|中心|研究院|所))",
                 text,
             )
             if match:
@@ -174,7 +177,7 @@ def _parse_item_group(lines: list[str]) -> InvoiceItem | None:
     continuations = lines[1:]
 
     # Tax rate and tax amount always appear at the end of the first line.
-    tax_match = re.search(r"(\d+(?:\.\d+)?%\s+-?\d+(?:\.\d+)?)\s*$", first_line)
+    tax_match = re.search(r"(\d+(?:\.\d+)?%\s*-?\d+(?:\.\d+)?)\s*$", first_line)
     if not tax_match:
         return None
 

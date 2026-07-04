@@ -1,8 +1,10 @@
+import logging
 import subprocess
 import sys
 
 from app.cleanup import cleanup_artifacts, clear_all_data
-from app.config import check_dependencies, ensure_data_directories, load_settings
+from app.config import check_dependencies, ensure_data_directories, init_config, load_settings
+from app.logging_config import setup_logging
 
 
 def should_cleanup(argv):
@@ -19,6 +21,9 @@ def should_generate_delivery(argv):
         return False
     first = argv[0].lower()
     return first in ("invoice-to-delivery", "delivery", "fapiao-table")
+
+
+logger = logging.getLogger(__name__)
 
 
 def build_pdf_filename(number, reimburse_to, name):
@@ -46,31 +51,30 @@ def _process_fapiao(downloaded_items, settings, page_id):
                 item["path"].name,
             )
             item["path"].replace(target_path)
-            print(f"  Saved PDF to fapiao folder: {target_path}")
+            logger.info("Saved PDF to fapiao folder: %s", target_path)
             pdf_count += 1
         except Exception as exc:
-            print(f"  Warning: Could not handle file {item['path']}: {exc}")
+            logger.warning("Could not handle file %s: %s", item["path"], exc)
 
     if pdf_count == 0:
-        print("  No PDF files found for this item.")
+        logger.info("No PDF files found for this item.")
         return 0
 
     # Auto-generate the delivery-order Excel after saving new fapiao PDFs.
     try:
         output_path = default_delivery_excel_path(settings.fapiao_dir)
         generate_delivery_excel(settings.fapiao_dir, output_path)
-        print(f"  Updated delivery order Excel: {output_path}")
+        logger.info("Updated delivery order Excel: %s", output_path)
     except Exception as exc:
-        print(f"  Warning: Could not update delivery order Excel: {exc}")
+        logger.warning("Could not update delivery order Excel: %s", exc)
 
     return 1
 
 
 def _process_download():
     """Download mode: just download, no PDF generation, no status update."""
-    print(
-        "  Download completed. Skipping PDF generation and status update "
-        "(MODE=download)."
+    logger.info(
+        "Download completed. Skipping PDF generation and status update (MODE=download)."
     )
     return 1
 
@@ -81,13 +85,13 @@ def _process_pdf(downloaded_items, settings, number, reimburse_to, name, label_t
 
     output_path = settings.output_dir / build_pdf_filename(number, reimburse_to, name)
     create_pdf(downloaded_items, output_path, label_text=label_text)
-    print(f"  Generated PDF: {output_path}")
+    logger.info("Generated PDF: %s", output_path)
 
     for item in downloaded_items:
         try:
             item["path"].unlink()
         except Exception as exc:
-            print(f"  Warning: Could not remove temp file {item['path']}: {exc}")
+            logger.warning("Could not remove temp file %s: %s", item["path"], exc)
 
     return output_path
 
@@ -119,15 +123,15 @@ def _run_batch(results, settings, notion):
             reimburse_to = "mirna"
 
         label_text = f"{reimburse_to}_{number}_{name}"
-        print(f"Processing: [{label_text}] ({len(files) if files else 0} files)")
+        logger.info("Processing: [%s] (%s files)", label_text, len(files) if files else 0)
 
         if not files:
-            print(f"  No files found for {name}, skipping download.")
+            logger.info("No files found for %s, skipping download.", name)
             continue
 
         downloaded_items = download_media(files, settings.download_dir)
         if not downloaded_items:
-            print("  Failed to download any valid media.")
+            logger.warning("Failed to download any valid media.")
             continue
 
         if settings.mode == "fapiao":
@@ -146,6 +150,8 @@ def _run_batch(results, settings, notion):
 
 
 def run_processor(mode_override=None):
+    init_config()
+
     if not check_dependencies():
         return 1
 
@@ -161,28 +167,29 @@ def run_processor(mode_override=None):
 
     notion = create_client(settings.notion_token)
 
-    print("Starting Notion Media Processor...")
+    logger.info("Starting Notion Media Processor...")
 
     try:
         warning = ensure_database_access(notion, settings.notion_page_id)
         if warning:
-            print(warning)
+            logger.warning("%s", warning)
 
-        print(
-            f"Querying database {settings.notion_page_id} for status "
-            f"'{settings.status_to_process}'..."
+        logger.info(
+            "Querying database %s for status '%s'...",
+            settings.notion_page_id,
+            settings.status_to_process,
         )
 
         processed_count = 0
         all_generated_pdfs = []
 
         for results in query_database_batches(settings):
-            print(f"Found {len(results)} items to process in this batch.")
+            logger.info("Found %s items to process in this batch.", len(results))
             batch_count, batch_pdfs = _run_batch(results, settings, notion)
             processed_count += batch_count
             all_generated_pdfs.extend(batch_pdfs)
 
-        print(f"\nProcessing complete. {processed_count} items processed.")
+        logger.info("Processing complete. %s items processed.", processed_count)
 
         if settings.mode == "pdf" and all_generated_pdfs:
             from app.pdf_service import merge_pdfs
@@ -193,17 +200,18 @@ def run_processor(mode_override=None):
                 [pdf_path for _, pdf_path in all_generated_pdfs],
                 merged_path,
             )
-            print(f"Generated merged PDF: {merged_path}")
+            logger.info("Generated merged PDF: %s", merged_path)
 
-            print("\nUpdating Notion statuses...")
-            print("  [WARNING] Notion API limitations prevent uploading local files.")
-            print("            The PDFs have been saved locally.")
+            logger.info("Updating Notion statuses...")
+            logger.warning("Notion API limitations prevent uploading local files.")
+            logger.warning("The PDFs have been saved locally.")
 
             for page_id, _ in all_generated_pdfs:
                 try:
-                    print(
-                        f"  Updating status for {page_id} to "
-                        f"'{settings.status_processed}'..."
+                    logger.info(
+                        "Updating status for %s to '%s'...",
+                        page_id,
+                        settings.status_processed,
                     )
                     update_page_status(
                         notion,
@@ -211,16 +219,16 @@ def run_processor(mode_override=None):
                         settings.status_property_name,
                         settings.status_processed,
                     )
-                    print("  Status updated successfully.")
+                    logger.info("Status updated successfully.")
                 except Exception as exc:
-                    print(f"  Error updating status for {page_id}: {exc}")
+                    logger.error("Error updating status for %s: %s", page_id, exc)
 
         if processed_count > 0:
-            print(f"\nOutput directory: {settings.output_dir}")
+            logger.info("Output directory: %s", settings.output_dir)
             if sys.platform == "darwin" and settings.output_dir.exists():
                 subprocess.run(["open", str(settings.output_dir)], check=False)
     except Exception as exc:
-        print(f"An error occurred: {exc}")
+        logger.error("An error occurred: %s", exc)
         return 1
 
     return 0
@@ -267,6 +275,8 @@ def interactive_menu():
 def main(argv=None):
     args = sys.argv[1:] if argv is None else argv
 
+    setup_logging()
+
     if not args:
         menu_result = interactive_menu()
         if menu_result is None:
@@ -280,7 +290,7 @@ def main(argv=None):
         return 0
 
     if should_generate_delivery(args):
-        from app.invoice_to_delivery import main as delivery_main
+        from app.invoice_to_delivery import delivery_main
         return delivery_main(args[1:])
 
     mode_override = None

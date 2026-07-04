@@ -1,5 +1,10 @@
+import logging
+import time
+
 import httpx
 from notion_client import Client
+
+logger = logging.getLogger(__name__)
 
 
 def create_client(token):
@@ -84,52 +89,84 @@ def extract_property_value(page, prop_name):
 
 
 def query_database_batches(settings):
+    """Query Notion database using the official SDK (with retry on 429)."""
+    notion = create_client(settings.notion_token)
+    database_id = normalize_database_id(settings.notion_page_id)
+
     has_more = True
     next_cursor = None
+    max_retries = 3
+    backoff = 1.0
 
     while has_more:
-        query_params = {
-            "filter": {
-                "property": settings.status_property_name,
-                "select": {
-                    "equals": settings.status_to_process,
-                },
-            }
+        filter_obj = {
+            "property": settings.status_property_name,
+            "select": {
+                "equals": settings.status_to_process,
+            },
         }
 
+        kwargs = {
+            "database_id": database_id,
+            "filter": filter_obj,
+        }
         if next_cursor:
-            query_params["start_cursor"] = next_cursor
+            kwargs["start_cursor"] = next_cursor
 
-        url = f"https://api.notion.com/v1/databases/{settings.notion_page_id}/query"
-        headers = {
-            "Authorization": f"Bearer {settings.notion_token}",
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json",
-        }
+        for attempt in range(max_retries):
+            try:
+                response = notion.databases.query(**kwargs)
+                break
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 429:
+                    wait = backoff * (2 ** attempt)
+                    logger.warning(
+                        "Notion API rate limited (429), retrying in %.1fs...", wait
+                    )
+                    time.sleep(wait)
+                    continue
+                raise RuntimeError(f"Notion database query failed: {exc}") from exc
+            except Exception:
+                if attempt < max_retries - 1:
+                    wait = backoff * (2 ** attempt)
+                    logger.warning(
+                        "Notion API error, retrying in %.1fs... (attempt %d/%d)",
+                        wait, attempt + 1, max_retries,
+                    )
+                    time.sleep(wait)
+                    continue
+                raise
 
-        try:
-            response = httpx.post(url, headers=headers, json=query_params, timeout=30.0)
-            response.raise_for_status()
-        except Exception as exc:
-            message = f"Direct HTTP request failed: {exc}"
-            if hasattr(exc, "response") and exc.response is not None:
-                message += f"\nResponse: {exc.response.text}"
-            raise RuntimeError(message) from exc
-
-        payload = response.json()
-        yield payload.get("results", [])
-        has_more = payload.get("has_more", False)
-        next_cursor = payload.get("next_cursor")
+        yield response.get("results", [])
+        has_more = response.get("has_more", False)
+        next_cursor = response.get("next_cursor")
 
 
 def update_page_status(notion, page_id, status_property_name, status_processed):
-    notion.pages.update(
-        page_id=page_id,
-        properties={
-            status_property_name: {
-                "select": {
-                    "name": status_processed,
-                }
-            }
-        },
-    )
+    """Update a page's status property with retry on 429."""
+    max_retries = 3
+    backoff = 1.0
+
+    for attempt in range(max_retries):
+        try:
+            notion.pages.update(
+                page_id=page_id,
+                properties={
+                    status_property_name: {
+                        "select": {
+                            "name": status_processed,
+                        }
+                    }
+                },
+            )
+            return
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                wait = backoff * (2 ** attempt)
+                logger.warning(
+                    "Notion API rate limited (429) on status update, retrying in %.1fs...",
+                    wait,
+                )
+                time.sleep(wait)
+                continue
+            raise

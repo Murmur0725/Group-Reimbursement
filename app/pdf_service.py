@@ -1,4 +1,5 @@
 import io
+import logging
 from pathlib import Path
 
 from PIL import Image
@@ -8,6 +9,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfgen import canvas
+
+logger = logging.getLogger(__name__)
 
 _CJK_FONT = "STSong-Light"
 pdfmetrics.registerFont(UnicodeCIDFont(_CJK_FONT))
@@ -67,7 +70,7 @@ def create_pdf(downloaded_items, output_filename, label_text=None):
                 packet.seek(0)
                 writer.append_pages_from_reader(PdfReader(packet))
             except Exception as exc:
-                print(f"Error adding image to PDF {file_path}: {exc}")
+                logger.error("Error adding image to PDF %s: %s", file_path, exc)
 
         elif file_type == "pdf":
             try:
@@ -89,12 +92,12 @@ def create_pdf(downloaded_items, output_filename, label_text=None):
 
                     writer.add_page(page)
             except DependencyError:
-                print(
-                    f"Error merging PDF {file_path}: encrypted PDF needs "
-                    "'cryptography' installed. Run 'pip install cryptography'."
+                logger.error(
+                    "Error merging PDF %s: encrypted PDF needs 'cryptography' installed.",
+                    file_path,
                 )
             except Exception as exc:
-                print(f"Error merging PDF {file_path}: {exc}")
+                logger.error("Error merging PDF %s: %s", file_path, exc)
 
     with output_path.open("wb") as file_obj:
         writer.write(file_obj)
@@ -109,7 +112,7 @@ def merge_pdfs(pdf_paths, output_path):
     for path in pdf_paths:
         path = Path(path)
         if not path.exists():
-            print(f"Warning: PDF not found, skipping merge: {path}")
+            logger.warning("PDF not found, skipping merge: %s", path)
             continue
 
         try:
@@ -117,12 +120,12 @@ def merge_pdfs(pdf_paths, output_path):
             for page in reader.pages:
                 writer.add_page(page)
         except DependencyError:
-            print(
-                f"Error merging PDF {path}: encrypted PDF needs "
-                "'cryptography' installed. Run 'pip install cryptography'."
+            logger.error(
+                "Error merging PDF %s: encrypted PDF needs 'cryptography' installed.",
+                path,
             )
         except Exception as exc:
-            print(f"Error merging PDF {path}: {exc}")
+            logger.error("Error merging PDF %s: %s", path, exc)
 
     with output_path.open("wb") as file_obj:
         writer.write(file_obj)

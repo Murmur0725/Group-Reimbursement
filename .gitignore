@@ -16,3 +16,5 @@ data/downloads/*
 !data/downloads/.gitkeep
 data/output_pdfs/*
 !data/output_pdfs/.gitkeep
+data/fapiao/*
+!data/fapiao/.gitkeep

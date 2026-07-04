@@ -1,9 +1,11 @@
 import argparse
+import logging
 import shutil
-import sys
 from pathlib import Path
 
 from app.config import DATA_DIR, DOWNLOAD_DIR, OUTPUT_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def cleanup_artifacts(download_dir=DOWNLOAD_DIR, output_dir=OUTPUT_DIR):
@@ -12,11 +14,11 @@ def cleanup_artifacts(download_dir=DOWNLOAD_DIR, output_dir=OUTPUT_DIR):
     for path in (download_dir, output_dir):
         if path.exists():
             shutil.rmtree(path)
-            print(f"Removed {path}")
+            logger.info("Removed %s", path)
             removed_any = True
 
     if not removed_any:
-        print("No data/downloads or data/output_pdfs directory to remove.")
+        logger.info("No data/downloads or data/output_pdfs directory to remove.")
 
 
 def clear_directory(directory: Path, dry_run: bool = False) -> int:
@@ -28,7 +30,7 @@ def clear_directory(directory: Path, dry_run: bool = False) -> int:
 
     for item in sorted(directory.iterdir()):
         if dry_run:
-            print(f"  [预览] 将删除: {item}")
+            logger.info("  [预览] 将删除: %s", item)
             removed_count += 1
             continue
 
@@ -37,10 +39,10 @@ def clear_directory(directory: Path, dry_run: bool = False) -> int:
                 shutil.rmtree(item)
             else:
                 item.unlink()
-            print(f"  已删除: {item}")
+            logger.info("  已删除: %s", item)
             removed_count += 1
         except Exception as exc:
-            print(f"  [错误] 无法删除 {item}: {exc}", file=sys.stderr)
+            logger.error("  [错误] 无法删除 %s: %s", item, exc)
 
     return removed_count
 
@@ -63,36 +65,36 @@ def clear_all_data(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if not DATA_DIR.exists():
-        print(f"[错误] data 目录不存在: {DATA_DIR}", file=sys.stderr)
+        logger.error("[错误] data 目录不存在: %s", DATA_DIR)
         return 1
 
     subdirs = sorted(p for p in DATA_DIR.iterdir() if p.is_dir())
     if not subdirs:
-        print(f"data 目录下没有子目录: {DATA_DIR}")
+        logger.info("data 目录下没有子目录: %s", DATA_DIR)
         return 0
 
-    print("将清空以下目录的内容：")
+    logger.info("将清空以下目录的内容：")
     for subdir in subdirs:
-        print(f"  - {subdir}")
+        logger.info("  - %s", subdir)
 
     if args.dry_run:
-        print("\n[预览模式] 不会真正删除任何文件。\n")
+        logger.info("\n[预览模式] 不会真正删除任何文件。\n")
     elif not args.yes:
         try:
             answer = input("\n确认清空？(yes/no): ")
         except (EOFError, KeyboardInterrupt):
-            print("\n已取消")
+            logger.info("\n已取消")
             return 130
         if answer.strip().lower() not in ("yes", "y"):
-            print("已取消")
+            logger.info("已取消")
             return 0
-        print()
+        logger.info("")
 
     total = 0
     for subdir in subdirs:
-        print(f"清理: {subdir}")
+        logger.info("清理: %s", subdir)
         total += clear_directory(subdir, dry_run=args.dry_run)
 
     action = "将删除" if args.dry_run else "已删除"
-    print(f"\n{action} {total} 个项目")
+    logger.info("\n%s %s 个项目", action, total)
     return 0

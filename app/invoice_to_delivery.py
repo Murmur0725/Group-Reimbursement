@@ -12,6 +12,7 @@ are left blank so the user can fill them in later.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from datetime import datetime
@@ -22,6 +23,18 @@ from openpyxl.styles import Font
 
 from app.invoice_parser import InvoiceItem, parse_all_invoices
 
+logger = logging.getLogger(__name__)
+
+# --- Configurable constants ------------------------------------------------
+
+# Default project number (课题号) used in delivery-order sheets.
+DEFAULT_PROJECT_NO = "Y01656113"
+# Default product category.
+DEFAULT_CATEGORY = "实验耗材"
+# Default receiver (收货人).
+DEFAULT_RECEIVER = "mirna zordan"
+
+# ---------------------------------------------------------------------------
 
 # Column headers exactly matching the reference delivery-order sheet.
 COLUMNS = [
@@ -48,7 +61,7 @@ def item_to_row(invoice_no: str | None, seller: str | None, item: InvoiceItem) -
     # Use the tax-inclusive unit price so that 单价 * 数量 == 价税合计.
     unit_price = item.tax_inclusive_unit_price
     return [
-        "Y01656113",  # 课题号
+        DEFAULT_PROJECT_NO,  # 课题号
         "实验耗材",  # *产品分类
         "无",  # *货号
         item.name,  # *商品名称
@@ -58,7 +71,7 @@ def item_to_row(invoice_no: str | None, seller: str | None, item: InvoiceItem) -
         unit_price,  # *单价
         item.qty,  # *数量
         seller or "",  # *供应商名称
-        "mirna zordan",  # *收货人
+        DEFAULT_RECEIVER,  # *收货人
         "",  # 收货地址
         "",  # 使用用途
         invoice_no or "",  # 发票号
@@ -97,10 +110,10 @@ def remove_previous_delivery_files(directory: str | os.PathLike) -> int:
         ):
             try:
                 path.unlink()
-                print(f"  Removed old delivery file: {path.name}")
+                logger.info("Removed old delivery file: %s", path.name)
                 removed += 1
             except Exception as exc:
-                print(f"  Warning: Could not remove old delivery file {path}: {exc}")
+                logger.warning("Could not remove old delivery file %s: %s", path, exc)
     return removed
 
 
@@ -149,7 +162,8 @@ def generate_delivery_excel(
     return output_path
 
 
-def main(argv: list[str] | None = None) -> int:
+def delivery_main(argv: list[str] | None = None) -> int:
+    """CLI entry point for generating a delivery-order Excel from invoice PDFs."""
     if argv is None:
         argv = sys.argv[1:]
 
@@ -164,18 +178,18 @@ def main(argv: list[str] | None = None) -> int:
         output_path = Path(argv[1])
 
     if not pdf_dir.exists():
-        print(f"Error: invoice directory not found: {pdf_dir}")
+        logger.error("Invoice directory not found: %s", pdf_dir)
         return 1
 
     try:
         result = generate_delivery_excel(pdf_dir, output_path)
-        print(f"Generated delivery order: {result}")
+        logger.info("Generated delivery order: %s", result)
     except Exception as exc:
-        print(f"Error: {exc}")
+        logger.error("Failed to generate delivery order: %s", exc)
         return 1
 
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(delivery_main())

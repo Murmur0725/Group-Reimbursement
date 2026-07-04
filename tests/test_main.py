@@ -1,13 +1,39 @@
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import openpyxl
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+from reportlab.pdfgen import canvas
 
-from app.invoice_to_delivery import default_delivery_excel_path
+from app.invoice_to_delivery import DEFAULT_CATEGORY, DEFAULT_RECEIVER, default_delivery_excel_path
 from app.main import _process_fapiao, interactive_menu
+
+
+def _create_sample_invoice_pdf(path: Path) -> None:
+    """Create a minimal Chinese invoice PDF suitable for invoice_parser."""
+    _CJK_FONT = "STSong-Light"
+    pdfmetrics.registerFont(UnicodeCIDFont(_CJK_FONT))
+
+    pdf_canvas = canvas.Canvas(str(path))
+    pdf_canvas.setFont(_CJK_FONT, 10)
+    lines = [
+        "电子发票",
+        "发票号码：12345678901234567890",
+        "开票日期：2024 年 05 月 20 日",
+        "购 名称：南方科技大学",
+        "销 名称：深圳实验耗材有限公司 统一社会信用代码",
+        "项目名称 规格型号 单位 数量 单价 金额 税率 税额",
+        "*化学试剂*琼脂糖 100g 瓶 2.0 150.00 300.00 13% 39.00",
+        "合 计 300.00 39.00",
+    ]
+    y = 800
+    for line in lines:
+        pdf_canvas.drawString(50, y, line)
+        y -= 15
+    pdf_canvas.save()
 
 
 class InteractiveMenuTests(unittest.TestCase):
@@ -40,13 +66,6 @@ class InteractiveMenuTests(unittest.TestCase):
 class MainFapiaoTests(unittest.TestCase):
     def test_process_fapiao_generates_delivery_excel(self):
         """After saving fapiao PDFs, the delivery-order Excel is regenerated."""
-        project_root = Path(__file__).resolve().parents[1]
-        sample_pdf = next(
-            p
-            for p in (project_root / "data" / "fapiao").glob("*.pdf")
-            if p.name != ".DS_Store"
-        )
-
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             data_dir = base_dir / "data"
@@ -55,8 +74,8 @@ class MainFapiaoTests(unittest.TestCase):
             fapiao_dir.mkdir(parents=True)
             download_dir.mkdir(parents=True)
 
-            fake_pdf = download_dir / sample_pdf.name
-            shutil.copy(sample_pdf, fake_pdf)
+            fake_pdf = download_dir / "sample_invoice.pdf"
+            _create_sample_invoice_pdf(fake_pdf)
 
             settings = MagicMock()
             settings.data_dir = data_dir
@@ -85,18 +104,11 @@ class MainFapiaoTests(unittest.TestCase):
             self.assertIsNotNone(receiver_col)
             self.assertIsNotNone(category_col)
             for row in worksheet.iter_rows(min_row=2, values_only=True):
-                self.assertEqual(row[receiver_col], "mirna zordan")
-                self.assertEqual(row[category_col], "实验耗材")
+                self.assertEqual(row[receiver_col], DEFAULT_RECEIVER)
+                self.assertEqual(row[category_col], DEFAULT_CATEGORY)
 
     def test_process_fapiao_removes_old_delivery_files(self):
         """When a new delivery-order Excel is generated, old ones are removed."""
-        project_root = Path(__file__).resolve().parents[1]
-        sample_pdf = next(
-            p
-            for p in (project_root / "data" / "fapiao").glob("*.pdf")
-            if p.name != ".DS_Store"
-        )
-
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             data_dir = base_dir / "data"
@@ -105,8 +117,8 @@ class MainFapiaoTests(unittest.TestCase):
             fapiao_dir.mkdir(parents=True)
             download_dir.mkdir(parents=True)
 
-            fake_pdf = download_dir / sample_pdf.name
-            shutil.copy(sample_pdf, fake_pdf)
+            fake_pdf = download_dir / "sample_invoice.pdf"
+            _create_sample_invoice_pdf(fake_pdf)
 
             # Create old generated delivery files that should be cleaned up.
             old_excel = fapiao_dir / "发票发货单整理_2026-06-22_11-29-31.xlsx"

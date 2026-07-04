@@ -1,7 +1,11 @@
 import importlib
+import logging
 import os
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -12,13 +16,21 @@ FAPIAO_DIR = DATA_DIR / "fapiao"
 REQUIRED_DEPENDENCIES = {
     "dotenv": "python-dotenv",
     "notion_client": "notion-client",
-    "requests": "requests",
     "PIL": "pillow",
     "reportlab": "reportlab",
     "pypdf": "pypdf",
     "cryptography": "cryptography",
     "httpx": "httpx",
 }
+
+VALID_MODES = {"pdf", "download", "fapiao"}
+
+# Notion page IDs are 32 hex characters, optionally hyphenated as UUIDv4.
+_NOTION_ID_RE = re.compile(r"^[0-9a-f]{32}$", re.IGNORECASE)
+_NOTION_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -38,6 +50,34 @@ class Settings:
     download_dir: Path = DOWNLOAD_DIR
     output_dir: Path = OUTPUT_DIR
     fapiao_dir: Path = FAPIAO_DIR
+    # Collected validation warnings that are not fatal.
+    warnings: list[str] = field(default_factory=list)
+
+    def validate(self) -> "Settings":
+        """Validate this settings instance and return it (with warnings appended)."""
+        warnings: list[str] = []
+
+        if self.mode not in VALID_MODES:
+            raise ValueError(
+                f"Invalid MODE '{self.mode}'. Must be one of: {', '.join(sorted(VALID_MODES))}"
+            )
+
+        if not _NOTION_ID_RE.match(self.notion_page_id) and not _NOTION_UUID_RE.match(
+            self.notion_page_id
+        ):
+            warnings.append(
+                f"NOTION_PAGE_ID '{self.notion_page_id}' does not look like "
+                "a valid Notion database ID (expected 32 hex chars or UUID)."
+            )
+
+        if self.mode == "fapiao" and not self.fapiao_dir.exists():
+            warnings.append(
+                f"FAPIAO_DIR '{self.fapiao_dir}' does not exist yet — it will be created."
+            )
+
+        # Return a new instance with warnings baked in (frozen dataclass).
+        object.__setattr__(self, "warnings", warnings)
+        return self
 
 
 def check_dependencies():
@@ -53,18 +93,28 @@ def check_dependencies():
         return True
 
     packages = ", ".join(sorted(set(missing_packages)))
-    print("[ERROR] Missing Python dependencies:", packages)
+    # Log and print — this runs before logging setup, so we use both.
+    msg = f"Missing Python dependencies: {packages}"
+    logger.error(msg)
+    print(f"[ERROR] {msg}")
     print("Install them with:")
     print("  uv sync")
 
     return False
 
 
-def load_settings(mode_override=None):
+def init_config():
+    """Load environment variables from the project root .env file.
+
+    This should be called once at application entry points before
+    ``load_settings()`` is used.
+    """
     from dotenv import load_dotenv
 
-    load_dotenv(BASE_DIR / ".env")
+    load_dotenv(BASE_DIR / ".env", override=True)
 
+
+def load_settings(mode_override=None):
     notion_token = os.getenv("NOTION_TOKEN")
     notion_page_id = os.getenv("NOTION_PAGE_ID")
 
@@ -90,7 +140,7 @@ def load_settings(mode_override=None):
         reimburse_to_property_name=os.getenv("REIMBURSE_TO_PROPERTY_NAME", "报销给谁"),
         files_property_name=os.getenv("FILES_PROPERTY_NAME", "文件和媒体"),
         fapiao_dir=Path(os.getenv("FAPIAO_DIR", str(FAPIAO_DIR))),
-    )
+    ).validate()
 
 
 def ensure_data_directories(settings):
