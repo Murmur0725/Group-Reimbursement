@@ -12,9 +12,13 @@ wheels/
 
 # Local data and system files
 .DS_Store
+data/reimbursement.db
 data/downloads/*
 !data/downloads/.gitkeep
 data/output_pdfs/*
 !data/output_pdfs/.gitkeep
 data/fapiao/*
 !data/fapiao/.gitkeep
+
+# Local planning docs (not for upload)
+docs/

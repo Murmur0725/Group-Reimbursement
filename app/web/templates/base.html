@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Notion 报销后台{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css?v=20260706c">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Notion 报销后台</div>
+    <nav>
+      <a href="/">看板</a>
+      <a href="/records">报销清单</a>
+      <a href="/sync">同步管理</a>
+    </nav>
+  </header>
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+  <script src="/static/app.js?v=20260706b" defer></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}处理结果 - Notion 报销后台{% endblock %}
+{% block content %}
+<section class="page-header">
+  <h1>{{ result.title }}</h1>
+  <a class="button-link" href="/records">返回清单</a>
+</section>
+
+<section class="panel">
+  <p>{{ result.message }}</p>
+  <dl>
+    <dt>处理数量</dt><dd>{{ result.processed_count }}</dd>
+    <dt>跳过数量</dt><dd>{{ result.skipped_count }}</dd>
+  </dl>
+</section>
+
+<section class="panel">
+  <h2>生成文件</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>文件名</th>
+        <th>类型</th>
+        <th>本地路径</th>
+        <th>下载</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for file in result.files %}
+      <tr>
+        <td>{{ file.file_name }}</td>
+        <td>{{ file.file_type }}</td>
+        <td>{{ file.local_path }}</td>
+        <td>
+          {% if file.download_url %}
+          <a href="{{ file.download_url }}">下载</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">没有生成文件</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -16,6 +16,13 @@ _CJK_FONT = "STSong-Light"
 pdfmetrics.registerFont(UnicodeCIDFont(_CJK_FONT))
 
 
+def build_pdf_filename(number, reimburse_to, name):
+    filename = f"{reimburse_to}_{number}_{name}.pdf"
+    forbidden = set('/\\:*?"<>|')
+    sanitized = "".join(char for char in filename if char not in forbidden).strip()
+    return sanitized or "output.pdf"
+
+
 def is_pdf_file(file_path):
     path = Path(file_path)
 

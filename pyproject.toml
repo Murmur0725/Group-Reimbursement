@@ -5,15 +5,21 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "apscheduler>=3.11.3",
     "cryptography",
+    "fastapi>=0.139.0",
     "httpx",
+    "jinja2>=3.1.6",
     "notion-client==2.2.1",
     "openpyxl>=3.1.5",
     "pdfplumber>=0.11.10",
     "pillow",
     "pypdf",
     "python-dotenv",
+    "python-multipart>=0.0.32",
     "reportlab",
+    "sqlalchemy>=2.0.51",
+    "uvicorn>=0.50.0",
 ]
 
 [dependency-groups]

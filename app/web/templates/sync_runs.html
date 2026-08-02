@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}同步管理 - Notion 报销后台{% endblock %}
+{% block content %}
+<section class="page-header">
+  <h1>同步管理</h1>
+  <form action="/sync/run" method="post">
+    <button type="submit">立即同步</button>
+  </form>
+</section>
+
+<section class="panel">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>模式</th>
+        <th>状态</th>
+        <th>开始</th>
+        <th>结束</th>
+        <th>拉取</th>
+        <th>新增</th>
+        <th>更新</th>
+        <th>未变</th>
+        <th>状态变化</th>
+        <th>错误</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in runs %}
+      <tr>
+        <td>{{ run.id }}</td>
+        <td>{{ run.mode }}</td>
+        <td>{{ run.status }}</td>
+        <td>{{ run.started_at | beijing_time }}</td>
+        <td>{{ run.finished_at | beijing_time }}</td>
+        <td>{{ run.fetched_count }}</td>
+        <td>{{ run.created_count }}</td>
+        <td>{{ run.updated_count }}</td>
+        <td>{{ run.unchanged_count }}</td>
+        <td>{{ run.status_event_count }}</td>
+        <td>{{ run.error_message or "" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="11">暂无同步记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
+

@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}报销清单 - Notion 报销后台{% endblock %}
+{% block content %}
+<section class="page-header">
+  <h1>报销清单</h1>
+  <a class="button-link" href="/sync">同步管理</a>
+</section>
+
+<section class="panel">
+  <form class="filters" method="get" action="/records">
+    <input name="q" value="{{ q }}" placeholder="搜索名称或编号">
+    <input name="amount" value="{{ amount if amount is not none else '' }}" placeholder="金额">
+    <select name="tolerance">
+      <option value="0" {% if tolerance == 0 %}selected{% endif %}>精确</option>
+      <option value="1" {% if tolerance == 1 %}selected{% endif %}>±1 元</option>
+      <option value="2" {% if tolerance == 2 %}selected{% endif %}>±2 元</option>
+    </select>
+    <select name="status">
+      <option value="">全部状态</option>
+      {% for item in statuses %}
+      <option value="{{ item.status_name }}" {% if selected_status == item.status_name %}selected{% endif %}>{{ item.status_name }}</option>
+      {% endfor %}
+    </select>
+    <select name="applicant">
+      <option value="">全部申请人</option>
+      {% for name in applicants %}
+      <option value="{{ name }}" {% if selected_applicant == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+    <select name="reimbursed_to">
+      <option value="">全部报销给谁</option>
+      {% for name in reimbursed_to_options %}
+      <option value="{{ name }}" {% if selected_reimbursed_to == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">搜索</button>
+  </form>
+  <div class="bulk-action-row">
+    <div class="bulk-action-main">
+      <span class="bulk-action-label">批量操作</span>
+      <div class="bulk-action-buttons">
+        <form method="post" action="/actions/generate-filtered-pdf" class="batch-job-form" data-job-url="/actions/batch-jobs/pdf" data-status-target="batch-status-pdf">
+          <input type="hidden" name="status" value="{{ pdf_status }}">
+          <input type="hidden" name="applicant" value="">
+          <input type="hidden" name="reimbursed_to" value="">
+          <input type="hidden" name="q" value="">
+          <input type="hidden" name="amount" value="">
+          <input type="hidden" name="tolerance" value="0">
+          <input type="hidden" name="update_status" value="true">
+          <button type="submit" title="处理 {{ pdf_status }}，完成后更新为 {{ pdf_status_processed }}">生成PDF并更新状态</button>
+        </form>
+        <form method="post" action="/actions/generate-delivery-excel" class="batch-job-form" data-job-url="/actions/batch-jobs/intake" data-status-target="batch-status-intake">
+          <input type="hidden" name="status" value="{{ fapiao_status }}">
+          <input type="hidden" name="applicant" value="">
+          <input type="hidden" name="reimbursed_to" value="">
+          <input type="hidden" name="q" value="">
+          <input type="hidden" name="amount" value="">
+          <input type="hidden" name="tolerance" value="0">
+          <button type="submit" title="处理 {{ fapiao_status }}，下载发票 PDF 并生成入库信息 Excel">生成入库信息</button>
+        </form>
+        <form method="post" action="/actions/clear-data" onsubmit="return confirm('确认清空 data 目录下各子目录内容？');">
+          <button type="submit" title="清空 data 目录下各子目录内容">清空本地Data</button>
+        </form>
+      </div>
+      <div class="bulk-action-notes">
+        <span>生成PDF并更新状态：处理 {{ pdf_status }}，合并 PDF 后更新为 {{ pdf_status_processed }}。</span>
+        <span>生成入库信息：处理 {{ fapiao_status }}，下载发票 PDF 并生成入库信息 Excel。</span>
+        <span>清空本地Data：清空 data 子目录内容，保留数据库文件。</span>
+      </div>
+      <div class="batch-status-list" hidden>
+        <div id="batch-status-pdf" class="batch-status" data-total="{{ pdf_pending_count }}" hidden>
+          <div class="batch-status-text">生成PDF并更新状态：待处理 {{ pdf_pending_count }} 条</div>
+          <progress value="0" max="{{ pdf_pending_count if pdf_pending_count else 1 }}"></progress>
+          <div class="batch-status-files"></div>
+        </div>
+        <div id="batch-status-intake" class="batch-status" data-total="{{ fapiao_pending_count }}" hidden>
+          <div class="batch-status-text">生成入库信息：待处理 {{ fapiao_pending_count }} 条</div>
+          <progress value="0" max="{{ fapiao_pending_count if fapiao_pending_count else 1 }}"></progress>
+          <div class="batch-status-files"></div>
+        </div>
+      </div>
+    </div>
+    <div class="data-file-summary">
+      <div class="data-file-summary-title">Data 文件：{{ data_file_summary.total_count }} 个</div>
+      {% for bucket in data_file_summary.buckets %}
+      <details class="data-file-bucket">
+        <summary>{{ bucket.label }}：{{ bucket.count }} 个</summary>
+        <div class="data-file-links">
+          {% for file in bucket.files %}
+          <a href="{{ file.url }}">{{ file.name }} <span>{{ file.size }}</span></a>
+          {% else %}
+          <span class="empty-note">暂无文件</span>
+          {% endfor %}
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <table>
+    <thead>
+      <tr>
+        <th>编号</th>
+        <th>名称</th>
+        <th>状态</th>
+        <th>金额</th>
+        <th>申请人</th>
+        <th>报销给谁</th>
+        <th>附件</th>
+        <th>最近状态变更</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for record in records %}
+      <tr>
+        <td>{{ record.number or "" }}</td>
+        <td>{{ record.title or "" }}</td>
+        <td>
+          <form method="post" action="/actions/status-update" class="inline-form">
+            <input type="hidden" name="notion_page_id" value="{{ record.notion_page_id }}">
+            <input type="hidden" name="expected_old_status" value="{{ record.status or '' }}">
+            <input type="hidden" name="redirect_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+            <select name="new_status" aria-label="修改状态" class="status-badge {{ record.status|status_class }}">
+              {% for item in statuses %}
+              <option value="{{ item.status_name }}" {% if item.status_name == record.status %}selected{% endif %}>{{ item.status_name }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit">保存</button>
+          </form>
+        </td>
+        <td>{{ "%.2f"|format(record.amount) if record.amount is not none else "" }}</td>
+        <td>{{ record.applicant or "" }}</td>
+        <td>{{ record.reimbursed_to or "" }}</td>
+        <td>{{ record.attachment_count }}</td>
+        <td>{{ latest_status_dates.get(record.notion_page_id, "") }}</td>
+        <td>
+          <a href="/records/{{ record.notion_page_id }}">详情</a>
+          {% if record.notion_url %}
+          <a href="{{ record.notion_url }}" target="_blank" rel="noreferrer">Notion</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9">暂无数据</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

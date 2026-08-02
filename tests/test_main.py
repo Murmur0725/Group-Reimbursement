@@ -9,7 +9,8 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfgen import canvas
 
 from app.invoice_to_delivery import DEFAULT_CATEGORY, DEFAULT_RECEIVER, default_delivery_excel_path
-from app.main import _process_fapiao, interactive_menu
+from app.main import interactive_menu, should_start_web
+from app.services.cli_batch import process_fapiao
 
 
 def _create_sample_invoice_pdf(path: Path) -> None:
@@ -52,6 +53,11 @@ class InteractiveMenuTests(unittest.TestCase):
             result = interactive_menu()
         self.assertEqual(result, "__clear_data__")
 
+    def test_menu_returns_web_by_number_seven(self):
+        with patch("builtins.input", return_value="7"):
+            result = interactive_menu()
+        self.assertEqual(result, ["web"])
+
     def test_menu_returns_none_for_quit(self):
         with patch("builtins.input", return_value="quit"):
             result = interactive_menu()
@@ -61,6 +67,12 @@ class InteractiveMenuTests(unittest.TestCase):
         with patch("builtins.input", side_effect=["invalid", "download"]):
             result = interactive_menu()
         self.assertEqual(result, ["download"])
+
+    def test_should_start_web_accepts_aliases(self):
+        self.assertTrue(should_start_web(["web"]))
+        self.assertTrue(should_start_web(["server"]))
+        self.assertTrue(should_start_web(["backend"]))
+        self.assertFalse(should_start_web(["pdf"]))
 
 
 class MainFapiaoTests(unittest.TestCase):
@@ -81,7 +93,7 @@ class MainFapiaoTests(unittest.TestCase):
             settings.data_dir = data_dir
             settings.fapiao_dir = fapiao_dir
 
-            result = _process_fapiao(
+            result = process_fapiao(
                 [{"type": "pdf", "path": fake_pdf}],
                 settings,
                 "page-id",
@@ -134,7 +146,7 @@ class MainFapiaoTests(unittest.TestCase):
             settings.data_dir = data_dir
             settings.fapiao_dir = fapiao_dir
 
-            result = _process_fapiao(
+            result = process_fapiao(
                 [{"type": "pdf", "path": fake_pdf}],
                 settings,
                 "page-id",

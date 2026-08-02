@@ -51,45 +51,56 @@ def extract_property_value(page, prop_name):
 
     if prop_type == "title":
         title_list = prop.get("title", [])
-        return title_list[0].get("plain_text", "") if title_list else ""
+        return "".join(item.get("plain_text", "") for item in title_list)
 
     if prop_type == "number":
         return prop.get("number")
 
     if prop_type == "rich_text":
         text_list = prop.get("rich_text", [])
-        return text_list[0].get("plain_text", "") if text_list else ""
+        return "".join(item.get("plain_text", "") for item in text_list)
 
     if prop_type == "select":
         select_obj = prop.get("select")
         return select_obj.get("name") if select_obj else None
 
+    if prop_type == "status":
+        status_obj = prop.get("status")
+        return status_obj.get("name") if status_obj else None
+
     if prop_type == "people":
         people_list = prop.get("people", [])
-        return people_list[0].get("name", "") if people_list else ""
+        return ", ".join(person.get("name", "") for person in people_list if person.get("name"))
 
     if prop_type == "files":
         files = []
         for file_obj in prop.get("files", []):
             url = ""
+            file_type = file_obj.get("type", "")
 
-            if file_obj.get("type") == "file":
+            if file_type == "file":
                 url = file_obj.get("file", {}).get("url", "")
-            elif file_obj.get("type") == "external":
+            elif file_type == "external":
                 url = file_obj.get("external", {}).get("url", "")
 
             if url:
                 files.append({
                     "url": url,
                     "id": file_obj.get("name", "unknown_id"),
+                    "name": file_obj.get("name", "unknown"),
+                    "type": file_type,
                 })
         return files
 
     return None
 
 
-def query_database_batches(settings):
-    """Query Notion database using the official SDK (with retry on 429)."""
+def query_database_batches(settings, *, filter_by_status: bool = True):
+    """Query Notion database using the official SDK (with retry on 429).
+
+    When ``filter_by_status`` is True, only rows matching
+    ``settings.status_to_process`` are returned.
+    """
     notion = create_client(settings.notion_token)
     database_id = normalize_database_id(settings.notion_page_id)
 
@@ -99,17 +110,14 @@ def query_database_batches(settings):
     backoff = 1.0
 
     while has_more:
-        filter_obj = {
-            "property": settings.status_property_name,
-            "select": {
-                "equals": settings.status_to_process,
-            },
-        }
-
-        kwargs = {
-            "database_id": database_id,
-            "filter": filter_obj,
-        }
+        kwargs = {"database_id": database_id}
+        if filter_by_status:
+            kwargs["filter"] = {
+                "property": settings.status_property_name,
+                "select": {
+                    "equals": settings.status_to_process,
+                },
+            }
         if next_cursor:
             kwargs["start_cursor"] = next_cursor
 
@@ -142,10 +150,52 @@ def query_database_batches(settings):
         next_cursor = response.get("next_cursor")
 
 
-def update_page_status(notion, page_id, status_property_name, status_processed):
+def query_all_database_batches(settings):
+    """Query all Notion database rows without business filtering."""
+    yield from query_database_batches(settings, filter_by_status=False)
+
+
+def get_database_property_type(notion, database_id, property_name):
+    """Return the Notion property type for a database property, if available."""
+    database = notion.databases.retrieve(database_id=normalize_database_id(database_id))
+    prop = database.get("properties", {}).get(property_name)
+    return prop.get("type") if prop else None
+
+
+def get_database_property_options(notion, database_id, property_name):
+    """Return configured options for a select/status database property."""
+    database = notion.databases.retrieve(database_id=normalize_database_id(database_id))
+    prop = database.get("properties", {}).get(property_name)
+    if not prop:
+        return []
+
+    prop_type = prop.get("type")
+    if prop_type not in ("select", "status"):
+        return []
+
+    options = prop.get(prop_type, {}).get("options", [])
+    return [
+        {
+            "name": option.get("name"),
+            "id": option.get("id"),
+            "color": option.get("color"),
+        }
+        for option in options
+        if option.get("name")
+    ]
+
+
+def update_page_status(
+    notion,
+    page_id,
+    status_property_name,
+    status_processed,
+    property_type="select",
+):
     """Update a page's status property with retry on 429."""
     max_retries = 3
     backoff = 1.0
+    notion_type = "status" if property_type == "status" else "select"
 
     for attempt in range(max_retries):
         try:
@@ -153,7 +203,7 @@ def update_page_status(notion, page_id, status_property_name, status_processed):
                 page_id=page_id,
                 properties={
                     status_property_name: {
-                        "select": {
+                        notion_type: {
                             "name": status_processed,
                         }
                     }

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}看板 - Notion 报销后台{% endblock %}
+{% block content %}
+<section class="page-header">
+  <h1>看板</h1>
+  <form action="/sync/run" method="post">
+    <button type="submit">立即同步</button>
+  </form>
+</section>
+
+<section class="metrics">
+  <div class="metric">
+    <span>总记录数</span>
+    <strong>{{ summary.total_records }}</strong>
+  </div>
+  <div class="metric">
+    <span>当前总金额</span>
+    <strong>{{ "%.2f"|format(summary.total_amount) }}</strong>
+  </div>
+  <div class="metric">
+    <span>近 7 天状态变化</span>
+    <strong>{{ summary.recent_events }}</strong>
+  </div>
+  <div class="metric">
+    <span>最近同步</span>
+    <strong>{{ summary.recent_sync.status if summary.recent_sync else "无" }}</strong>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>状态分布</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>状态</th>
+        <th>记录数</th>
+        <th>金额</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for status, count, amount in summary.status_rows %}
+      <tr>
+        <td>{{ status or "空" }}</td>
+        <td>{{ count }}</td>
+        <td>{{ "%.2f"|format(amount) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3">暂无数据</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
+

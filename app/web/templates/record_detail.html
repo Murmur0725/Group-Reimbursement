@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}报销详情 - Notion 报销后台{% endblock %}
+{% block content %}
+{% if not record %}
+<section class="panel"><p>记录不存在。</p></section>
+{% else %}
+<section class="page-header">
+  <h1>{{ record.title or "未命名报销单" }}</h1>
+  <a class="button-link" href="/records">返回清单</a>
+</section>
+
+<section class="detail-grid">
+  <div class="panel">
+    <h2>当前信息</h2>
+    <dl>
+      <dt>编号</dt><dd>{{ record.number or "" }}</dd>
+      <dt>状态</dt><dd>{{ record.status or "空" }}</dd>
+      <dt>金额</dt><dd>{{ "%.2f"|format(record.amount) if record.amount is not none else "" }}</dd>
+      <dt>申请人</dt><dd>{{ record.applicant or "" }}</dd>
+      <dt>报销给谁</dt><dd>{{ record.reimbursed_to or "" }}</dd>
+      <dt>备注</dt><dd>{{ record.remark or "" }}</dd>
+      <dt>最近同步</dt><dd>{{ record.last_synced_at | beijing_time }}</dd>
+    </dl>
+    {% if record.notion_url %}
+    <a href="{{ record.notion_url }}" target="_blank" rel="noreferrer">打开 Notion 页面</a>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2>修改状态</h2>
+    <form method="post" action="/actions/status-update" class="stack">
+      <input type="hidden" name="notion_page_id" value="{{ record.notion_page_id }}">
+      <input type="hidden" name="expected_old_status" value="{{ record.status or '' }}">
+      <select name="new_status" required>
+        {% for item in statuses %}
+        <option value="{{ item.status_name }}" {% if item.status_name == record.status %}selected{% endif %}>{{ item.status_name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">同步状态到 Notion</button>
+    </form>
+    <form method="post" action="/actions/generate-record-pdf" class="stack">
+      <input type="hidden" name="notion_page_id" value="{{ record.notion_page_id }}">
+      <button type="submit">生成该条 PDF</button>
+    </form>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>状态时间线</h2>
+  <div class="status-timeline">
+    {% for event in events %}
+    <div class="timeline-item">
+      <div class="timeline-date">{{ event.changed_date }}</div>
+      <div class="timeline-marker" aria-hidden="true"></div>
+      <div class="timeline-content">
+        <span class="timeline-old">{{ event.old_status or "空" }}</span>
+        <span class="timeline-arrow">→</span>
+        <strong>{{ event.new_status or "空" }}</strong>
+      </div>
+    </div>
+    {% else %}
+    <p class="empty-note">暂无状态变化</p>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel">
+  <h2>附件</h2>
+  <table>
+    <thead><tr><th>文件名</th><th>类型</th><th>本地路径</th></tr></thead>
+    <tbody>
+      {% for item in attachments %}
+      <tr>
+        <td>{{ item.file_name or "" }}</td>
+        <td>{{ item.file_type or "" }}</td>
+        <td>{{ item.local_path or "" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3">暂无附件</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h2>历史版本</h2>
+  <table>
+    <thead><tr><th>版本</th><th>日期</th><th>状态</th><th>金额</th></tr></thead>
+    <tbody>
+      {% for version in versions %}
+      <tr>
+        <td>{{ version.version_no }}</td>
+        <td>{{ version.snapshot_date }}</td>
+        <td>{{ version.status or "空" }}</td>
+        <td>{{ "%.2f"|format(version.amount) if version.amount is not none else "" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">暂无版本</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}
